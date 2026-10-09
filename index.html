@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<meta name="theme-color" content="#100e2a">
+<title>عجلة الحظ 🎡</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+:root{color-scheme:dark;--bg:#100e2a;--card:#1d1944;--gold:#ffd166;--text:#fff}
+*{box-sizing:border-box}
+body{margin:0;background:radial-gradient(circle at top,#32256a 0,#100e2a 55%);font-family:system-ui,-apple-system,sans-serif;color:var(--text);min-height:100vh;padding:18px}
+.wrap{max-width:520px;margin:auto}
+header{text-align:center;padding:10px 0 18px}
+h1{margin:5px 0;font-size:28px;color:var(--gold)}
+.sub{opacity:.8;font-size:14px}
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:18px}
+.stat,.panel{background:rgba(29,25,68,.92);border:1px solid #ffffff19;border-radius:18px;padding:14px;box-shadow:0 8px 25px #0002}
+.stat span{display:block;opacity:.75;font-size:13px}.stat strong{font-size:22px;color:var(--gold)}
+.wheel-area{position:relative;width:min(86vw,360px);margin:12px auto 20px}
+.pointer{position:absolute;z-index:2;top:-5px;left:50%;transform:translateX(-50%);width:0;height:0;border-left:17px solid transparent;border-right:17px solid transparent;border-top:32px solid #fff;filter:drop-shadow(0 3px 3px #0008)}
+#wheel{width:100%;display:block;border-radius:50%;border:8px solid #f9d777;box-shadow:0 0 0 5px #7c52d9,0 14px 35px #0008;transition:transform 4.3s cubic-bezier(.12,.72,.12,1)}
+.center{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);border:5px solid #f9d777;border-radius:50%;width:68px;height:68px;background:#211849;display:grid;place-items:center;font-size:28px;box-shadow:0 3px 12px #0007}
+.buttons{display:grid;gap:10px}
+button{width:100%;border:0;border-radius:14px;padding:14px 12px;font-size:16px;font-weight:800;cursor:pointer;color:#1b123e;background:linear-gradient(90deg,#ffe08a,#ffc145);box-shadow:0 5px 0 #a96b13}
+button.secondary{background:linear-gradient(90deg,#bca8ff,#8e72ef);box-shadow:0 5px 0 #4b368e;color:#fff}
+button:disabled{opacity:.55;cursor:not-allowed}
+.note{text-align:center;font-size:13px;opacity:.75;margin:13px 0}
+#message{min-height:25px;text-align:center;font-weight:700;color:var(--gold);margin:8px 0}
+.panel{margin-top:15px}
+.panel h2{font-size:17px;margin:0 0 10px}
+.history{display:flex;flex-direction:column;gap:8px}
+.item{display:flex;justify-content:space-between;gap:8px;padding:9px 10px;background:#ffffff09;border-radius:10px;font-size:13px}
+.muted{opacity:.7}
+footer{text-align:center;opacity:.45;font-size:11px;margin:18px 0 6px}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header><div style="font-size:36px">🎡</div><h1>عجلة الحظ</h1><div class="sub" id="welcome">أهلًا بك! جرّب حظك واجمع النقاط</div></header>
+<div class="stats">
+ <div class="stat"><span>💰 رصيدك</span><strong id="balance">—</strong> <span>نقطة</span></div>
+ <div class="stat"><span>🎁 المحاولة المجانية</span><strong id="timer">جارٍ التحميل</strong><span id="daily-status">كل 24 ساعة</span></div>
+</div>
+<div class="wheel-area"><div class="pointer"></div><canvas id="wheel" width="700" height="700"></canvas><div class="center">🎡</div></div>
+<div id="message">حظًا سعيدًا! ✨</div>
+<div class="buttons">
+ <button id="freeBtn" onclick="spin('free')">🎁 أدر العجلة مجانًا</button>
+</div>
+<div class="note">اللعبة ترفيهية؛ النقاط افتراضية ولا تُشترى ولا تُستبدل بأموال حقيقية.</div>
+<section class="panel"><h2>📜 آخر النتائج</h2><div class="history" id="history"><div class="muted">لا توجد نتائج بعد.</div></div></section>
+<footer>Lucky Wheel • Telegram Mini App</footer>
+</div>
+<script>
+const tg = window.Telegram?.WebApp;
+if (tg) { tg.ready(); tg.expand(); }
+const labels = ["0 نقطة","5 نقاط","10 نقاط","20 نقطة","50 نقطة","100 نقطة","حظ أوفر"];
+const colors = ["#f05b78","#f6a23d","#f8d45c","#41c7a5","#4d8cf5","#9b70ed","#f06bb4"];
+const canvas=document.getElementById("wheel"),ctx=canvas.getContext("2d");
+const arc=2*Math.PI/labels.length;
+function drawWheel(){
+ const cx=350,cy=350,r=340;
+ labels.forEach((label,i)=>{
+  const start=-Math.PI/2+i*arc,end=start+arc;
+  ctx.beginPath();ctx.moveTo(cx,cy);ctx.arc(cx,cy,r,start,end);ctx.closePath();
+  ctx.fillStyle=colors[i];ctx.fill();ctx.strokeStyle="#fff8";ctx.lineWidth=4;ctx.stroke();
+  ctx.save();ctx.translate(cx,cy);ctx.rotate(start+arc/2);
+  ctx.textAlign="right";ctx.fillStyle="#21143c";ctx.font="bold 30px system-ui";
+  ctx.fillText(label,r-25,10);ctx.restore();
+ });
+}
+drawWheel();
+let currentRotation=0, state=null, timerInterval=null, busy=false;
+function initData(){
+ if(!tg || !tg.initData){document.getElementById("message").textContent="افتح هذه الصفحة من زر عجلة الحظ داخل بوت تلغرام.";document.getElementById("freeBtn").disabled=true;document.getElementById("paidBtn").disabled=true;return;}
+ loadState();
+}
+async function api(path,method="GET",body=null){
+ const opts={method,headers:{"X-Telegram-Init-Data":tg.initData}};
+ if(body){opts.headers["Content-Type"]="application/json";opts.body=JSON.stringify(body);}
+ const res=await fetch(path,opts);const data=await res.json();
+ if(!res.ok)throw new Error(data.error||"حدث خطأ.");
+ return data;
+}
+async function loadState(){
+ try{
+  state=await api("/api/state");
+  document.getElementById("welcome").textContent=`أهلًا ${state.first_name||"بك"}! جرّب حظك واجمع النقاط`;
+  document.getElementById("balance").textContent=state.points;
+  document.getElementById("freeBtn").disabled=!state.free_spin_available;
+  document.getElementById("daily-status").textContent=state.free_spin_available?"متاحة الآن":"تتجدد بعد انتهاء المؤقت";
+  renderHistory(state.history);
+  updateTimer(state.free_spin_seconds);
+ }catch(e){document.getElementById("message").textContent=e.message;}
+}
+function updateTimer(seconds){
+ if(timerInterval)clearInterval(timerInterval);
+ let left=seconds||0;
+ const paint=()=>{if(left<=0){document.getElementById("timer").textContent="متاحة";if(state){state.free_spin_available=true;document.getElementById("freeBtn").disabled=false;document.getElementById("daily-status").textContent="متاحة الآن";}return;}
+  const h=Math.floor(left/3600),m=Math.floor((left%3600)/60),s=left%60;
+  document.getElementById("timer").textContent=[h,m,s].map(v=>String(v).padStart(2,"0")).join(":");left--;
+ };
+ paint();timerInterval=setInterval(paint,1000);
+}
+function renderHistory(items){
+ const el=document.getElementById("history");
+ if(!items||!items.length){el.innerHTML='<div class="muted">لا توجد نتائج بعد.</div>';return;}
+ el.innerHTML=items.map(x=>`<div class="item"><span>${escapeHtml(x.label)}</span><span>${new Date(x.created_at*1000).toLocaleString("ar-DZ")}</span></div>`).join("");
+}
+function escapeHtml(s){return String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
+async function spin(){
+ if(busy)return;busy=true;
+ const freeBtn=document.getElementById("freeBtn");
+ freeBtn.disabled=true;document.getElementById("message").textContent="🎡 العجلة تدور...";
+ try{
+  const result=await api("/api/spin","POST",{source:"free"});
+  const segment=2*Math.PI/labels.length;
+  const centerAngle=(result.prize_index+0.5)*segment;
+  const desired=((Math.PI*2 - centerAngle)%(Math.PI*2));
+  const currentNorm=((currentRotation%(Math.PI*2))+Math.PI*2)%(Math.PI*2);
+  const extra=(desired-currentNorm+Math.PI*2)%(Math.PI*2);
+  currentRotation += Math.PI*2*5+extra;
+  canvas.style.transform=`rotate(${currentRotation}rad)`;
+  await new Promise(r=>setTimeout(r,4400));
+  document.getElementById("message").textContent=`🎉 نتيجتك: ${result.label} • رصيدك ${result.balance} نقطة`;
+  if(tg?.HapticFeedback)tg.HapticFeedback.notificationOccurred("success");
+  await loadState();
+ }catch(e){document.getElementById("message").textContent=e.message;await loadState();}
+ finally{busy=false;freeBtn.disabled=!(state&&state.free_spin_available);}
+}
+initData();
+</script>
+</body>
+</html>
